@@ -1,14 +1,64 @@
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
+import aiohttp
+from bs4 import BeautifulSoup
 
-@register("helloworld", "Your Name", "一个简单的 Hello World 插件", "1.0.0", "repo url")
-class MyPlugin(Star):
+@register("server_info", "Your Name", "获取服务器信息并渲染为图片返回", "1.0.0")
+class ServerInfoPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
-    
-    # 注册指令的装饰器。指令名为 helloworld。注册成功后，发送 `/helloworld` 就会触发这个指令，并回复 `你好, {user_name}!`
-    @filter.command("helloworld")
-    async def helloworld(self, event: AstrMessageEvent):
-        '''这是一个 hello world 指令''' # 这是 handler 的描述，将会被解析方便用户了解插件内容。建议填写。
-        user_name = event.get_sender_name()
-        yield event.plain_result(f"Hello, {user_name}!") # 发送一条纯文本消息
+
+    async def fetch_and_render_webpage(self, url: str) -> str:
+        """
+        获取网页内容并渲染为图片。
+        """
+        try:
+            # 获取网页内容
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        return None
+                    html_content = await response.text()
+
+            # 使用 BeautifulSoup 提取网页正文内容
+            soup = BeautifulSoup(html_content, "html.parser")
+            body_content = soup.body.get_text(separator="\n", strip=True) if soup.body else "无正文内容"
+
+            # 定义 HTML 模板
+            HTML_TEMPLATE = """
+            <div style="font-size: 16px; font-family: Arial, sans-serif; padding: 20px;">
+                <pre style="white-space: pre-wrap; word-wrap: break-word; color: #555;">{{ content }}</pre>
+            </div>
+            """
+
+            # 渲染网页内容为图片
+            image_url = await self.html_render(HTML_TEMPLATE, {"content": body_content})
+            return image_url
+
+        except Exception as e:
+            print(f"处理网页时出错: {str(e)}")
+            return None
+
+    @filter.command("mc_info")
+    async def mc_info(self, event: AstrMessageEvent):
+        """
+        通过 /mc_info 获取服务器 3 的信息并渲染为图片返回。
+        """
+        url = "http://154.204.177.235:8008/server/3"
+        image_url = await self.fetch_and_render_webpage(url)
+        if image_url:
+            yield event.image_result(image_url)
+        else:
+            yield event.plain_result("无法获取服务器 3 的信息。")
+
+    @filter.command("web_info")
+    async def web_info(self, event: AstrMessageEvent):
+        """
+        通过 /web_info 获取服务器 4 的信息并渲染为图片返回。
+        """
+        url = "http://154.204.177.235:8008/server/4"
+        image_url = await self.fetch_and_render_webpage(url)
+        if image_url:
+            yield event.image_result(image_url)
+        else:
+            yield event.plain_result("无法获取服务器 4 的信息。")
